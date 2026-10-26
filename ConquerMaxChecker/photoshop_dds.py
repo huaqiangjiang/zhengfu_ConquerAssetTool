@@ -1,18 +1,18 @@
-"""Photoshop-owned mip1 encoding; never fall back to a different DDS encoder."""
+"""Photoshop high-pass refinement and DDS encoding of mip0/mip1."""
 import json
 import os
+import re
 from pathlib import Path
 import shutil
 import subprocess
 import sys
 import uuid
 
-from dds_mip_guard import plan, commit, digest
+from dds_mip_guard import plan, commit
 
 
 def resolve_photoshop(version):
     import winreg
-    majors = {'CS3': 10, '2019': 20, '2022': 23, '2025': 26}
     found = []
     for view in (winreg.KEY_WOW64_64KEY, winreg.KEY_WOW64_32KEY):
         with winreg.OpenKey(winreg.HKEY_CLASSES_ROOT, '', 0, winreg.KEY_READ | view) as root:
@@ -28,15 +28,18 @@ def resolve_photoshop(version):
                     path = command[:command.lower().index('.exe') + 4].strip('" ')
                     if not Path(path).is_file():
                         continue
-                    # Registered executable location identifies the requested year;
-                    # app.version is checked again inside Photoshop before touching documents.
-                    label = next((v for v in majors if any(name.lower() in path.lower() for name in ('Photoshop ' + v, 'Photoshop CC ' + v))), None)
+                    # ProgID suffixes do not equal app.version (CC2019 uses .130).
+                    # The selected executable year is checked again inside PS.
+                    match = re.search(r'Photoshop\s+(?:CC\s+)?(20\d{2}|CS3)(?=[\\/\s]|$)', path, re.I)
+                    label = match.group(1).upper() if match else None
                     if label and (version == 'auto' or label == version):
-                        found.append((label, name, majors[label]))
+                        major = 10 if label == 'CS3' else int(label) - 1999
+                        if major > 0:
+                            found.append((label, name, major))
                 except (OSError, ValueError):
                     continue
     if not found:
-        raise RuntimeError('未找到已注册的 Photoshop ' + version + '（支持 CS3、CC 2019、2022、2025）。请先正常安装并启动一次。')
+        raise RuntimeError('未找到已注册的 Photoshop ' + version + '。需要可用的 Photoshop 自动化注册和 DDS 保存接口。')
     found.sort(key=lambda x: (-x[2], len(x[1]), x[1]))
     return found[0]
 
@@ -44,10 +47,10 @@ def resolve_photoshop(version):
 def refine(staged, source, version='auto'):
     label, progid, major = resolve_photoshop(version)
     folder = Path(sys.executable).parent if getattr(sys, 'frozen', False) else Path(__file__).parent
-    script = folder / 'PhotoshopMIP1.ps1'
+    script = folder / 'PhotoshopRefine.ps1'
     if not script.is_file():
-        raise RuntimeError('缺少 PhotoshopMIP1.ps1，请复制完整插件目录。')
-    batch = Path(os.environ.get('LOCALAPPDATA', str(Path.home()))) / 'ConquerMaxChecker' / 'backups' / 'PS-mip1' / uuid.uuid4().hex
+        raise RuntimeError('缺少 PhotoshopRefine.ps1，请复制完整插件目录。')
+    batch = Path(os.environ.get('LOCALAPPDATA', str(Path.home()))) / 'ConquerMaxChecker' / 'backups' / 'PS-refine' / uuid.uuid4().hex
     batch.mkdir(parents=True)
     source_copy = batch / 'source.tga'
     shutil.copy2(source, source_copy)
@@ -62,7 +65,15 @@ def refine(staged, source, version='auto'):
         raise RuntimeError('PS精修超时，请检查PS弹窗；原输出未替换。关闭未完成的PS任务后再重试。备份：' + str(batch)) from exc
     if result.returncode:
         detail = (result.stdout + result.stderr).decode('utf-8', errors='replace')
-        raise RuntimeError('PS ' + label + ' 精修失败；请确认 DDS 插件能打开横向 mip 并以原 DXT 格式保存。没有采用替代编码。\n' + detail + '\n备份：' + str(batch))
+        raise RuntimeError('PS ' + label + ' 精修失败；需要可用的 NVIDIA DDS 或 Texture Tools Exporter 保存接口。\n' + detail + '\n备份：' + str(batch))
+    message = result.stdout.decode('utf-8-sig', errors='replace').strip().splitlines()
+    marker = next((line for line in message if line.startswith('PHOTOSHOP_REFINE_OK|')), None)
+    if marker is None:
+        raise RuntimeError('Photoshop 未返回精修完成标记；原输出未替换。备份：' + str(batch))
+    _, interface, actual_version, resampling = marker.split('|', 3)
     verification = commit(work)
-    verification.update(photoshop=label, progid=progid, backup=str(batch))
+    verification.update(photoshop=label, progid=progid, backup=str(batch),
+                        ddsInterface=interface, actualVersion=actual_version,
+                        resampling=resampling)
+    (work / 'verification.json').write_text(json.dumps(verification, ensure_ascii=False, indent=2), encoding='utf-8')
     return verification

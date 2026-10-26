@@ -33,7 +33,7 @@ from pathlib import Path
 from typing import Any, Callable, Iterable, Optional
 
 
-TOOL_VERSION = "0.2.7"
+TOOL_VERSION = "0.2.8"
 IMAGE_EXTS = {".dds", ".tga", ".psd", ".png", ".jpg", ".jpeg", ".bmp"}
 TEXTURE_EXTS = set(IMAGE_EXTS)
 PRODUCTION_EXTS = {".max", ".dds", ".tga"}
@@ -1190,8 +1190,8 @@ def convert_source_to_dds(
             if ps_refine:
                 from photoshop_dds import refine
                 try:
-                    encode_info['photoshop_mip1'] = refine(staged_path, input_path, ps_version)
-                    encode_info['photoshop_mip1']['file'] = str(output_path)
+                    encode_info['photoshop_refine'] = refine(staged_path, input_path, ps_version)
+                    encode_info['photoshop_refine']['file'] = str(output_path)
                 except Exception as exc:
                     ps_failure = str(exc)
                     raise
@@ -1218,7 +1218,7 @@ def convert_source_to_dds(
             if ps_refine and (output_path.read_bytes() if output_path.exists() else None) != original_output:
                 raise RuntimeError("输出DDS在处理中被其他操作修改，未覆盖。")
             if ps_refine and output_path.exists():
-                shutil.copy2(output_path, Path(encode_info['photoshop_mip1']['backup']) / 'previous-output.dds')
+                shutil.copy2(output_path, Path(encode_info['photoshop_refine']['backup']) / 'previous-output.dds')
             os.replace(staged_path, output_path)
             item.update(
                 {
@@ -1301,8 +1301,9 @@ def write_dds_conversion_report(
             f"Encoder={item.get('encode_info', {}).get('encoder')}, "
             f"Physical MIP={item.get('encode_info', {}).get('physical_mipmaps')}, "
             f"Sharpened MIP={item.get('encode_info', {}).get('sharpened_mip')}) "
-            f"PS精修={item.get('encode_info', {}).get('photoshop_mip1', {}).get('photoshop', '未启用')} "
-            f"PS精修备份={item.get('encode_info', {}).get('photoshop_mip1', {}).get('backup', '-')}"
+            f"PS精修={item.get('encode_info', {}).get('photoshop_refine', {}).get('photoshop', '未启用')} "
+            f"PS精修MIP={item.get('encode_info', {}).get('photoshop_refine', {}).get('refinedMips', [])} "
+            f"PS精修备份={item.get('encode_info', {}).get('photoshop_refine', {}).get('backup', '-')}"
             for item in result["converted"]
         ),
         "转换失败：",
@@ -2942,8 +2943,8 @@ def build_parser() -> argparse.ArgumentParser:
         help=f"MIP 层数，默认 {DDS_DEFAULT_MIP_COUNT}",
     )
 
-    convert_parser.add_argument("--ps-refine", action="store_true", help="由Photoshop缩小、锐化并编码mip1；失败保留原输出")
-    convert_parser.add_argument("--ps-version", choices=["auto", "CS3", "2019", "2022", "2025"], default="auto")
+    convert_parser.add_argument("--ps-refine", action="store_true", help="由Photoshop分别高反差保留＋叠加精修MIP0/MIP1并编码DDS；失败保留原输出")
+    convert_parser.add_argument("--ps-version", default="auto", help="auto、CS3 或注册的PS年份，如2019、2022、2025、2026；需要DDS保存接口")
 
     png_parser = subparsers.add_parser(
         "convert-png",

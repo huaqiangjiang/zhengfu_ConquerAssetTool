@@ -116,7 +116,7 @@
                 copyOk = false
                 append copyFailures "ConquerAssetTool.exe"
             )
-            for requiredFile in #("PhotoshopMIP1.ps1", "PS精修使用说明.txt") do
+            for requiredFile in #("PhotoshopRefine.ps1", "PS精修使用说明.txt") do
             (
                 if not (copyFileReplace (packageFolder + requiredFile) (installedFolder + "\\" + requiredFile)) do
                 (

@@ -9,7 +9,7 @@ global ConquerMaxChecker
 global ConquerMaxCheckerScriptFile
 global ConquerMaxCheckerScriptVersion
 ConquerMaxCheckerScriptFile = ""
-ConquerMaxCheckerScriptVersion = "2026-09-21-v0.2.7-ps"
+ConquerMaxCheckerScriptVersion = "2026-10-26-v0.2.8-ps"
 try(ConquerMaxCheckerScriptFile = getSourceFileName())catch()
 
 struct ConquerCheckItem
@@ -4825,7 +4825,7 @@ rollout conquerOneClickProgressRollout "一键出图进度" width:420 height:145
     )
 )
 
-rollout conquerCheckerRollout "征服MAX · 检查 / 整理 / 输出 v0.2.7" width:840 height:784
+rollout conquerCheckerRollout "征服MAX · 检查 / 整理 / 输出 v0.2.8" width:840 height:784
 (
     local externalStatusText = "就绪"
     local displayModeText = "检查只读；修改前自动备份"
@@ -4856,8 +4856,8 @@ rollout conquerCheckerRollout "征服MAX · 检查 / 整理 / 输出 v0.2.7" wid
     button btnOneClick "一键整理并出图" pos:[384,274] width:427 height:26
     groupBox gbOutput "3 输出 · 保留原贴图与 MAX 材质引用" pos:[10,319] width:820 height:100
     button btnConvertDDS "贴图 → DDS" pos:[24,344] width:140 height:28
-    checkbox chkPSRefine "生成后使用 PS 精修 mip1" pos:[184,347] width:260 checked:true
-    dropdownlist ddlPSVersion "PS版本" pos:[490,343] width:300 items:#("自动（2025 / 2022 / 2019 / CS3）","Photoshop 2025","Photoshop 2022","Photoshop CS3","Photoshop CC 2019") selection:1
+    checkbox chkPSRefine "PS 精修 MIP0 / MIP1" pos:[184,347] width:260 checked:true
+    dropdownlist ddlPSVersion "PS版本" pos:[490,343] width:300 items:#("自动（最新已注册版本）","Photoshop 2025","Photoshop 2022","Photoshop CS3","Photoshop CC 2019","Photoshop 2026") selection:1
     button btnConvertPNG "贴图 → PNG" pos:[24,377] width:140 height:28
     button btnExportC3 "导出 C3 物件" pos:[224,377] width:140 height:28
     button btnRenderPreview "场景预览 JPG" pos:[424,377] width:140 height:28
@@ -4880,7 +4880,7 @@ rollout conquerCheckerRollout "征服MAX · 检查 / 整理 / 输出 v0.2.7" wid
     )
     fn selectPSVersion choiceIndex =
     (
-        local versions = #("auto","2025","2022","CS3","2019")
+        local versions = #("auto","2025","2022","CS3","2019","2026")
         if choiceIndex >= 1 and choiceIndex <= versions.count do
         (
             ConquerMaxChecker.psVersion = versions[choiceIndex]
@@ -4950,7 +4950,7 @@ rollout conquerCheckerRollout "征服MAX · 检查 / 整理 / 输出 v0.2.7" wid
             if enabled != "" do ConquerMaxChecker.psRefine = (enabled == "true")
             chkPSRefine.checked = ConquerMaxChecker.psRefine
             local choiceIndex = (getINISetting settings "DDS" "version") as integer
-            if choiceIndex >= 1 and choiceIndex <= 5 do
+            if choiceIndex >= 1 and choiceIndex <= ddlPSVersion.items.count do
             (
                 ddlPSVersion.selection = choiceIndex
                 selectPSVersion choiceIndex

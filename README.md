@@ -1,6 +1,6 @@
 # 征服 MAX 模型检查器
 
-面向 Autodesk 3ds Max 2015 的模型检查、修复、资源整理与贴图转换工具。当前版本：**v0.2.7**。
+面向 Autodesk 3ds Max 2015 的模型检查、修复、资源整理与贴图转换工具。当前版本：**v0.2.8**。
 
 ## 在其他电脑安装或更新
 
@@ -14,7 +14,7 @@
    ```
 3. 每次拉取更新后，将 `ConquerMaxChecker/安装到MAX启动.ms` 再拖入 3ds Max 2015，同步文件到 MAX 用户目录；关闭旧检查器窗口并重新打开，确认标题版本。
 
-MAX 插件入口、转换程序和 Compressonator 都放在 `ConquerMaxChecker` 目录内。Photoshop DDS 精修还需要电脑上安装可用的 Photoshop 与兼容 DDS 插件。CC 2019、2022、2025、CS3 已接入版本选择，实际可用性取决于 DDS 插件组合，请查看 `ConquerMaxChecker/PS精修使用说明.txt` 中的验收状态。
+MAX 插件入口、转换程序和 Compressonator 都放在 `ConquerMaxChecker` 目录内。PS 精修会从原始 TGA 分别制作 MIP0、MIP1，使用高反差保留 1px＋叠加 100%，再由 Photoshop 的 DDS 接口编码。默认保持 TGA 尺寸和原有 MIP 层数设置；单层 DDS 只精修 MIP0，其余情况下精修前两层。支持 NVIDIA 旧式 DDS 和 Texture Tools Exporter 保存接口，PS 自动选择最新已注册版本，也可指定年份。实际兼容与验收情况见 `ConquerMaxChecker/PS精修使用说明.txt`。
 
 ## 源码构建
 
