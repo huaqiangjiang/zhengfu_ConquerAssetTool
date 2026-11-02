@@ -9,7 +9,7 @@ global ConquerMaxChecker
 global ConquerMaxCheckerScriptFile
 global ConquerMaxCheckerScriptVersion
 ConquerMaxCheckerScriptFile = ""
-ConquerMaxCheckerScriptVersion = "2026-10-26-v0.2.8-ps"
+ConquerMaxCheckerScriptVersion = "2026-11-02-v0.2.9-runtime"
 try(ConquerMaxCheckerScriptFile = getSourceFileName())catch()
 
 struct ConquerCheckItem
@@ -4825,7 +4825,7 @@ rollout conquerOneClickProgressRollout "一键出图进度" width:420 height:145
     )
 )
 
-rollout conquerCheckerRollout "征服MAX · 检查 / 整理 / 输出 v0.2.8" width:840 height:784
+rollout conquerCheckerRollout "征服MAX · 检查 / 整理 / 输出 v0.2.9" width:840 height:784
 (
     local externalStatusText = "就绪"
     local displayModeText = "检查只读；修改前自动备份"

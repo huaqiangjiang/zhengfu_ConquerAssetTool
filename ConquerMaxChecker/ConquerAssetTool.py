@@ -33,7 +33,7 @@ from pathlib import Path
 from typing import Any, Callable, Iterable, Optional
 
 
-TOOL_VERSION = "0.2.8"
+TOOL_VERSION = "0.2.9"
 IMAGE_EXTS = {".dds", ".tga", ".psd", ".png", ".jpg", ".jpeg", ".bmp"}
 TEXTURE_EXTS = set(IMAGE_EXTS)
 PRODUCTION_EXTS = {".max", ".dds", ".tga"}

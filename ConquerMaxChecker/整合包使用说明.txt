@@ -1,8 +1,8 @@
-﻿征服MAX模型检查器 v0.2.4（2026-09-21）
+﻿征服MAX模型检查器 v0.2.9（2026-11-02）
 
 更新已有安装：
 把本目录的“安装到MAX启动.ms”拖入 MAX 2015，安装器会同步新版脚本和程序到 MAX 用户脚本目录。
-仅临时使用：拖入 ConquerMaxChecker.ms。窗口标题必须显示 v0.2.4。
+仅临时使用：拖入 ConquerMaxChecker.ms。窗口标题必须显示 v0.2.9。
 旧窗口应先关闭；仅替换磁盘文件不会更新已经加载到 MAX 内存中的脚本。
 
 日常使用：
@@ -19,8 +19,8 @@
 多维材质含多个子材质时保留原外观，提示先按材质拆分，不再随意取第一个材质。
 废点自动清理；零面积面和多边面保留检查结果，需要人工决定拓扑处理方式。
 
-PNG/DDS 无需安装 Python 或 Pillow。ConquerAssetTool.exe 是独立运行程序。
-主脚本、宏、EXE 与 compressonator 保持在同一个整合包目录。
+PNG/DDS 无需安装 Python 或 Pillow。ConquerAssetTool.exe 使用同目录 _runtime 运行库。
+主脚本、宏、EXE、_runtime 与 compressonator 保持在同一个整合包目录。
 旧 _internal 目录可保留，但新版运行不依赖它。
 DDS/PNG 转换不修改源 TGA，也不修改 MAX 材质引用。
 

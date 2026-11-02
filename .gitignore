@@ -2,7 +2,7 @@
 .build/
 .review-backup/
 **/__pycache__/
-**/*.py[cod]
+**/*.py[co]
 
 # Per-machine reports and historical test captures
 ConquerMaxChecker/外部检查报告/
