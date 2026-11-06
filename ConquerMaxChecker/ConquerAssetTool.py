@@ -16,6 +16,7 @@ Max 内部单位、材质槽、真实材质路径和模型结构仍由 ConquerMa
 from __future__ import annotations
 
 import argparse
+from contextlib import redirect_stdout, redirect_stderr
 import csv
 import fnmatch
 import hashlib
@@ -27,13 +28,15 @@ import subprocess
 import struct
 import sys
 import tempfile
+import time
+import traceback
 import uuid
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any, Callable, Iterable, Optional
 
 
-TOOL_VERSION = "0.2.9"
+TOOL_VERSION = "0.2.10"
 IMAGE_EXTS = {".dds", ".tga", ".psd", ".png", ".jpg", ".jpeg", ".bmp"}
 TEXTURE_EXTS = set(IMAGE_EXTS)
 PRODUCTION_EXTS = {".max", ".dds", ".tga"}
@@ -3039,5 +3042,28 @@ def main(argv: list[str] | None = None) -> int:
     return 2
 
 
+def entrypoint(argv: list[str] | None = None) -> int:
+    # Max polls the process only; logging never depends on UI-thread pipe readers.
+    logging_parser = argparse.ArgumentParser(add_help=False)
+    logging_parser.add_argument("--log-file", type=Path)
+    logging_args, remaining = logging_parser.parse_known_args(argv)
+    if logging_args.log_file is None:
+        return main(remaining)
+    logging_args.log_file.parent.mkdir(parents=True, exist_ok=True)
+    with logging_args.log_file.open("w", encoding="utf-8", buffering=1) as log:
+        with redirect_stdout(log), redirect_stderr(log):
+            started = time.monotonic()
+            print(f"START {time.strftime('%Y-%m-%d %H:%M:%S')}", flush=True)
+            try:
+                code = main(remaining)
+            except SystemExit as exc:
+                code = exc.code
+            except Exception:
+                traceback.print_exc()
+                code = 2
+            print(f"END exit={code} elapsed={time.monotonic() - started:.3f}s", flush=True)
+            return code
+
+
 if __name__ == "__main__":
-    raise SystemExit(main())
+    raise SystemExit(entrypoint())

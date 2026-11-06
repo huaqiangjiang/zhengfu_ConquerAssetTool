@@ -9,7 +9,7 @@ global ConquerMaxChecker
 global ConquerMaxCheckerScriptFile
 global ConquerMaxCheckerScriptVersion
 ConquerMaxCheckerScriptFile = ""
-ConquerMaxCheckerScriptVersion = "2026-11-02-v0.2.9-runtime"
+ConquerMaxCheckerScriptVersion = "2026-11-06-v0.2.10-process"
 try(ConquerMaxCheckerScriptFile = getSourceFileName())catch()
 
 struct ConquerCheckItem
@@ -431,31 +431,23 @@ struct ConquerMaxCheckerStruct
             if matchPattern (toLower exePath) pattern:"*.py" then
             (
                 info.FileName = findPython()
-                info.Arguments = (quotePath exePath) + " " + arguments
+                info.Arguments = (quotePath exePath) + " --log-file " + (quotePath logPath) + " " + arguments
             )
             else
             (
                 info.FileName = exePath
-                info.Arguments = arguments
+                info.Arguments = "--log-file " + (quotePath logPath) + " " + arguments
             )
             info.WorkingDirectory = scriptFolder()
             info.UseShellExecute = false
             info.CreateNoWindow = true
-            info.RedirectStandardOutput = true
-            info.RedirectStandardError = true
-            info.StandardOutputEncoding = (dotNetClass "System.Text.Encoding").UTF8
-            info.StandardErrorEncoding = (dotNetClass "System.Text.Encoding").UTF8
+            /* 工具直接写 UTF-8 日志，避免 UI 线程等待异步管道 Result。 */
             proc = (dotNetClass "System.Diagnostics.Process").Start info
-            local stdoutTask = proc.StandardOutput.ReadToEndAsync()
-            local stderrTask = proc.StandardError.ReadToEndAsync()
-            while not proc.HasExited do
+            with redraw off
             (
-                windows.processPostedMessages()
-                sleep 0.05
+                while not (proc.WaitForExit 200) do windows.processPostedMessages()
             )
             local code = proc.ExitCode
-            local output = stdoutTask.Result + "\r\n" + stderrTask.Result
-            (dotNetClass "System.IO.File").WriteAllText logPath output (dotNetClass "System.Text.Encoding").UTF8
             proc.Dispose()
             code
         )
@@ -818,10 +810,9 @@ struct ConquerMaxCheckerStruct
             info.UseShellExecute = false
             info.CreateNoWindow = true
             proc = (dotNetClass "System.Diagnostics.Process").Start info
-            while not proc.HasExited do
+            with redraw off
             (
-                windows.processPostedMessages()
-                sleep 0.05
+                while not (proc.WaitForExit 200) do windows.processPostedMessages()
             )
             local code = proc.ExitCode
             proc.Dispose()
@@ -4820,12 +4811,12 @@ rollout conquerOneClickProgressRollout "一键出图进度" width:420 height:145
         lblProgressStage.text = stageText
         pbProgress.value = progressValue
         lblProgressPercent.text = (progressValue as string) + "%"
-        try(windows.processPostedMessages())catch()
+        try(with redraw off (windows.processPostedMessages()))catch()
         true
     )
 )
 
-rollout conquerCheckerRollout "征服MAX · 检查 / 整理 / 输出 v0.2.9" width:840 height:784
+rollout conquerCheckerRollout "征服MAX · 检查 / 整理 / 输出 v0.2.10" width:840 height:784
 (
     local externalStatusText = "就绪"
     local displayModeText = "检查只读；修改前自动备份"
