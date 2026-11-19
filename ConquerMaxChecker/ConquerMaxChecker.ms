@@ -9,7 +9,7 @@ global ConquerMaxChecker
 global ConquerMaxCheckerScriptFile
 global ConquerMaxCheckerScriptVersion
 ConquerMaxCheckerScriptFile = ""
-ConquerMaxCheckerScriptVersion = "2026-11-06-v0.2.10-process"
+ConquerMaxCheckerScriptVersion = "2026-11-19-v0.2.11-c3-feedback"
 try(ConquerMaxCheckerScriptFile = getSourceFileName())catch()
 
 struct ConquerCheckItem
@@ -40,6 +40,7 @@ struct ConquerMaxCheckerStruct
     lastBackup = "",
     exportLogBaseline = #(),
     lastConversionText = "",
+    lastC3ExportText = "",
 
     externalRoot = "",
     externalRootManual = false,
@@ -1445,10 +1446,11 @@ struct ConquerMaxCheckerStruct
 
     fn getGeometryNodes =
     (
+        local selectedNodes = if selectedOnly then (selection as array) else #()
         for n in geometry where isProductionNode n and
             not (matchPattern (classOf n as string) pattern:"*Bone*" ignoreCase:true) and
             not (matchPattern (classOf n as string) pattern:"*Biped*" ignoreCase:true) and
-            ((not selectedOnly) or (isSelected n)) collect n
+            ((not selectedOnly) or ((findItem selectedNodes n) > 0)) collect n
     ),
 
     fn getMaterialNodes =
@@ -4545,6 +4547,7 @@ struct ConquerMaxCheckerStruct
     fn exportC3Objects =
     (
         lastError = ""
+        lastC3ExportText = ""
         local root = ""
         local folder = ""
         local nodes = #()
@@ -4570,7 +4573,8 @@ struct ConquerMaxCheckerStruct
             root = c3ResourceRoot()
             if root == "" do
             (
-                messageBox "无法确定资源根目录。请先保存 MAX，或先选择资源目录。" title:"征服MAX模型检查器"
+                lastError = "无法确定资源根目录。请先将 MAX 保存到独立资源目录。"
+                if not silentSuccessMessages do messageBox lastError title:"征服MAX模型检查器"
                 return false
             )
 
@@ -4579,7 +4583,8 @@ struct ConquerMaxCheckerStruct
             try(makeDir folder)catch()
             if not doesDirectoryExist folder do
             (
-                messageBox ("无法创建 C3 导出目录：\n" + folder) title:"征服MAX模型检查器"
+                lastError = "无法创建 C3 导出目录：\n" + folder
+                if not silentSuccessMessages do messageBox lastError title:"征服MAX模型检查器"
                 return false
             )
 
@@ -4587,7 +4592,8 @@ struct ConquerMaxCheckerStruct
             nodes = getGeometryNodes()
             if nodes.count == 0 do
             (
-                messageBox "场景中没有可导出的生产几何对象。" title:"征服MAX模型检查器"
+                lastError = if selectedOnly then "没有选中的生产几何对象。请选择要导出的模型，或取消“仅处理选中模型”。" else "场景中没有可导出的生产几何对象。"
+                if not silentSuccessMessages do messageBox lastError title:"征服MAX模型检查器"
                 return false
             )
 
@@ -4612,7 +4618,7 @@ struct ConquerMaxCheckerStruct
             if rejectedPSDSourcePaths.count > 0 do
             (
                 lastError = "PSD贴图不能进入 C3，也不能转换DDS格式，只允许TGA转换。请先将 MAX 材质中的 PSD 替换为 TGA。"
-                messageBox lastError title:"征服MAX模型检查器"
+                if not silentSuccessMessages do messageBox lastError title:"征服MAX模型检查器"
                 return false
             )
         )
@@ -4740,6 +4746,8 @@ struct ConquerMaxCheckerStruct
 
         if failed.count == 0 then
         (
+            lastC3ExportText = "C3 已导出 " + (exported.count as string) + " 个。\r\n目录：\r\n" + folder + "\r\n\r\n"
+            for item in exported do lastC3ExportText += item[1] + " → " + item[2] + "\r\n"
             true
         )
         else
@@ -4816,7 +4824,7 @@ rollout conquerOneClickProgressRollout "一键出图进度" width:420 height:145
     )
 )
 
-rollout conquerCheckerRollout "征服MAX · 检查 / 整理 / 输出 v0.2.10" width:840 height:784
+rollout conquerCheckerRollout "征服MAX · 检查 / 整理 / 输出 v0.2.11" width:840 height:784
 (
     local externalStatusText = "就绪"
     local displayModeText = "检查只读；修改前自动备份"
@@ -5880,29 +5888,35 @@ rollout conquerCheckerRollout "征服MAX · 检查 / 整理 / 输出 v0.2.10" wi
     (
         if ConquerMaxChecker.busy then return()
         setBusy true
-        fn performAction =
+        local previousSilent = ConquerMaxChecker.silentSuccessMessages
+        local exportOk = false
+        local resultText = ""
+        externalStatusText = "外部状态：正在导出 C3 物件..."
+        displayModeText = "当前显示：C3 导出处理中"
+        edtPass.text = ""
+        edtIssue.text = ""
+        refreshStatusText()
+        try
         (
-        local hasC3Method = false
-        try(hasC3Method = isProperty ConquerMaxChecker #exportC3Objects)catch()
-        if not hasC3Method then
+            if not (isProperty ConquerMaxChecker #lastC3ExportText) do throw "当前加载的是旧版检查器，请关闭检查器后重新运行最新脚本。"
+            ConquerMaxChecker.silentSuccessMessages = true
+            exportOk = ConquerMaxChecker.exportC3Objects()
+            resultText = if exportOk then ConquerMaxChecker.lastC3ExportText else ConquerMaxChecker.lastError
+            if resultText == "" do resultText = "C3 导出未返回结果，请检查导出插件和场景。"
+        )
+        catch
         (
-            messageBox "当前3ds Max中仍加载的是旧版检查器脚本。请关闭当前检查器窗口后，重新运行最新的 ConquerMaxChecker.ms。" title:"征服MAX模型检查器"
+            exportOk = false
+            resultText = "C3 导出执行失败：\n" + (ConquerMaxChecker.exceptionText "未知错误")
+            ConquerMaxChecker.lastError = resultText
         )
-        else
-        (
-            try
-            (
-                ConquerMaxChecker.exportC3Objects()
-            )
-            catch
-            (
-                messageBox ("C3 导出执行失败：\n" + (ConquerMaxChecker.exceptionText "未知错误")) title:"征服MAX模型检查器"
-            )
-        )
-    
-        )
-        try(performAction())catch(messageBox (ConquerMaxChecker.exceptionText "操作失败") title:"征服MAX")
+        ConquerMaxChecker.silentSuccessMessages = previousSilent
+        externalStatusText = if exportOk then "外部状态：C3 导出完成" else "外部状态：C3 导出失败"
+        displayModeText = "当前显示：C3 导出结果（数量、路径及错误见右侧）"
+        edtIssue.text = resultText
+        refreshStatusText()
         setBusy false
+        messageBox resultText title:"征服MAX模型检查器 · C3 导出结果"
     )
 
     on btnRenderPreview pressed do
