@@ -6,10 +6,13 @@ Conquer MAX Checker for 3ds Max 2015
 */
 
 global ConquerMaxChecker
+global ConquerPendingDDSJob
+struct ConquerTextureJob (process, reportFolder, prefix)
+
 global ConquerMaxCheckerScriptFile
 global ConquerMaxCheckerScriptVersion
 ConquerMaxCheckerScriptFile = ""
-ConquerMaxCheckerScriptVersion = "2026-11-19-v0.2.11-c3-feedback"
+ConquerMaxCheckerScriptVersion = "2026-11-20-v0.2.12-dds"
 try(ConquerMaxCheckerScriptFile = getSourceFileName())catch()
 
 struct ConquerCheckItem
@@ -76,6 +79,8 @@ struct ConquerMaxCheckerStruct
     fn runDDSDetection = (),
     fn runDDSConversion = (),
     fn runPNGConversion = (),
+    fn startTextureConversion = (),
+    fn finishTextureConversion = (),
     fn runTextureConversion = (),
     fn externalCsvPath = (),
     fn externalJsonPath = (),
@@ -780,19 +785,17 @@ struct ConquerMaxCheckerStruct
 
     fn runPNGConversion sourcePaths = (runTextureConversion sourcePaths "png"),
 
-    fn runTextureConversion sourcePaths kind =
+    fn startTextureConversion sourcePaths kind =
     (
         lastConversionText = ""
-        if lastError != "" then return false
+        if lastError != "" then return undefined
         local root = outputResourceRoot()
-        if root == "" do (lastError = "请先把 MAX 保存到资源文件夹。"; return false)
-        if sourcePaths == undefined or sourcePaths.count == 0 do (lastError = "没有可转换的生产 TGA。"; return false)
+        if root == "" do (lastError = "请先把 MAX 保存到资源文件夹。"; return undefined)
+        if sourcePaths == undefined or sourcePaths.count == 0 do (lastError = "没有可转换的生产 TGA。"; return undefined)
         local exeFile = findExternalTool()
-        if exeFile == undefined do (lastError = "缺少整合包 ConquerAssetTool.exe，请重新解压完整插件。"; return false)
+        if exeFile == undefined do (lastError = "缺少整合包 ConquerAssetTool.exe，请重新解压完整插件。"; return undefined)
         externalOutput = externalReportFolder()
         local prefix = "conquer_" + kind + "_convert"
-        local statusFile = externalOutput + "\\" + prefix + ".status"
-        local reportFile = externalOutput + "\\" + prefix + ".txt"
         local proc = undefined
         try
         (
@@ -806,30 +809,50 @@ struct ConquerMaxCheckerStruct
             )
             local info = dotNetObject "System.Diagnostics.ProcessStartInfo"
             info.FileName = exeFile
-            info.Arguments = args
+            info.Arguments = "--log-file " + quotePath (externalOutput + "\\convert.log") + " " + args
             info.WorkingDirectory = scriptFolder()
             info.UseShellExecute = false
             info.CreateNoWindow = true
             proc = (dotNetClass "System.Diagnostics.Process").Start info
-            with redraw off
-            (
-                while not (proc.WaitForExit 200) do windows.processPostedMessages()
-            )
-            local code = proc.ExitCode
-            proc.Dispose()
+            ConquerTextureJob process:proc reportFolder:externalOutput prefix:prefix
+        )
+        catch
+        (
+            lastError = exceptionText "转换程序启动失败"
+            undefined
+        )
+    ),
+
+    fn finishTextureConversion job =
+    (
+        local ok = false
+        try
+        (
+            local code = job.process.ExitCode
+            local reportBase = job.reportFolder + "\\" + job.prefix
+            local statusFile = reportBase + ".status"
+            local reportFile = reportBase + ".txt"
             local lines = readUtf8Lines statusFile
             if doesFileExist reportFile do lastConversionText = (dotNetClass "System.IO.File").ReadAllText reportFile
             if code != 0 or lines.count == 0 do throw ("转换失败（退出码 " + code as string + "）。\n" + lastConversionText)
             if stripUtf8Bom lines[1] != "OK" do throw lastConversionText
             lastError = ""
-            true
+            ok = true
         )
-        catch
+        catch(lastError = (exceptionText "转换结果读取失败") + "\n运行报告：" + job.reportFolder)
+        try(job.process.Dispose())catch()
+        ok
+    ),
+
+    fn runTextureConversion sourcePaths kind =
+    (
+        local job = startTextureConversion sourcePaths kind
+        if job == undefined then return false
+        with redraw off
         (
-            lastError = exceptionText "转换工具未正常完成，请检查整合包版本。"
-            if proc != undefined do try(proc.Dispose())catch()
-            false
+            while not (job.process.WaitForExit 200) do windows.processPostedMessages()
         )
+        finishTextureConversion job
     ),
 
     fn externalCsvPath =
@@ -4824,7 +4847,7 @@ rollout conquerOneClickProgressRollout "一键出图进度" width:420 height:145
     )
 )
 
-rollout conquerCheckerRollout "征服MAX · 检查 / 整理 / 输出 v0.2.11" width:840 height:784
+rollout conquerCheckerRollout "征服MAX · 检查 / 整理 / 输出 v0.2.12" width:840 height:784
 (
     local externalStatusText = "就绪"
     local displayModeText = "检查只读；修改前自动备份"
@@ -4940,8 +4963,29 @@ rollout conquerCheckerRollout "征服MAX · 检查 / 整理 / 输出 v0.2.11" wi
         true
     )
 
+    timer ddsPoll interval:250 active:false
+    on ddsPoll tick do
+    (
+        local job = ConquerPendingDDSJob
+        if job == undefined then (ddsPoll.active = false; return())
+        if not job.process.HasExited then return()
+        ddsPoll.active = false
+        ConquerPendingDDSJob = undefined
+        local ok = ConquerMaxChecker.finishTextureConversion job
+        externalStatusText = if ok then "外部状态：DDS 转换完成，已回读校验" else "外部状态：DDS 转换失败"
+        edtIssue.text = if ok then ConquerMaxChecker.lastConversionText else ConquerMaxChecker.lastError
+        refreshStatusText()
+        setBusy false
+        if not ok do messageBox ConquerMaxChecker.lastError title:"征服MAX模型检查器"
+    )
+
     on conquerCheckerRollout open do
     (
+        if ConquerPendingDDSJob != undefined do
+        (
+            setBusy true
+            ddsPoll.active = true
+        )
         try
         (
             local settings = psSettingsFile()
@@ -5384,37 +5428,27 @@ rollout conquerCheckerRollout "征服MAX · 检查 / 整理 / 输出 v0.2.11" wi
             )
             else
             (
-                externalStatusText = "外部状态：正在转换 MAX 实际引用的贴图..."
-                refreshStatusText()
-                try(windows.processPostedMessages())catch()
-
-                try
+                ConquerPendingDDSJob = ConquerMaxChecker.startTextureConversion sourcePaths "dds"
+                if ConquerPendingDDSJob == undefined then
                 (
-                    if ConquerMaxChecker.runDDSConversion sourcePaths then
-                    (
-                        edtIssue.text = ConquerMaxChecker.lastConversionText
-                        externalStatusText = "外部状态：DDS 转换完成；已回读校验，MAX 保留 TGA"
-                        refreshStatusText()
-                    )
-                    else
-                    (
-                        externalStatusText = "外部状态：MAX 贴图 DDS 转换失败"
-                        refreshStatusText()
-                        messageBox ConquerMaxChecker.lastError title:"征服MAX模型检查器"
-                    )
-                )
-                catch
-                (
-                    externalStatusText = "外部状态：MAX 贴图 DDS 转换报错"
+                    externalStatusText = "外部状态：DDS 转换未能启动"
+                    edtIssue.text = ConquerMaxChecker.lastError
                     refreshStatusText()
-                    messageBox ("MAX 贴图 DDS 转换执行失败：\n" + (ConquerMaxChecker.exceptionText "未知错误")) title:"征服MAX模型检查器"
+                    messageBox ConquerMaxChecker.lastError title:"征服MAX模型检查器"
+                )
+                else
+                (
+                    ddsPoll.active = true
+                    externalStatusText = "外部状态：DDS 转换程序已启动"
+                    edtIssue.text = "本次运行报告：" + ConquerPendingDDSJob.reportFolder
+                    refreshStatusText()
                 )
             )
         )
     
         )
         try(performAction())catch(messageBox (ConquerMaxChecker.exceptionText "操作失败") title:"征服MAX")
-        setBusy false
+        if ConquerPendingDDSJob == undefined do setBusy false
     )
 
     on btnConvertPNG pressed do
