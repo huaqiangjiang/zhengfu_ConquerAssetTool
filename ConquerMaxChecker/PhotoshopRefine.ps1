@@ -10,6 +10,12 @@ $template=@'
  var c=charIDToTypeID;
  function own(d){opened.push(d);return d;}
  function rgb(d){app.activeDocument=d;d.activeChannels=[d.channels[0],d.channels[1],d.channels[2]];}
+ function sharpen(doc){
+  rgb(doc);var hp=doc.activeLayer.duplicate();hp.visible=true;
+  hp.name='High Pass '+job.radius+'px / Overlay 100%';hp.applyHighPass(job.radius);
+  hp.blendMode=BlendMode.OVERLAY;hp.opacity=job.opacity;hp.fillOpacity=job.fill;
+  doc.flatten();rgb(doc);
+ }
  function read(file){
   var f=new File(file);f.encoding='BINARY';if(!f.open('r'))throw Error('Cannot read '+file);
   var b=f.read();f.close();return b;
@@ -86,6 +92,11 @@ $template=@'
   if(source.mode!==DocumentMode.RGB)source.changeMode(ChangeMode.RGB);
   if(source.bitsPerChannel!==BitsPerChannelType.EIGHT)source.bitsPerChannel=BitsPerChannelType.EIGHT;
   source.flatten();
+  if(job.png){
+   sharpen(source);
+   source.saveAs(new File(job.png),new PNGSaveOptions(),true,Extension.LOWERCASE);
+   return 'PHOTOSHOP_REFINE_OK|png|'+app.version+'|original';
+  }
   if(job.fourcc!=='DXT1'&&source.channels.length<4)throw Error('Source alpha channel missing in Photoshop');
   for(var n=0;n<job.levels.length;n++){
    var level=job.levels[n];app.activeDocument=source;
@@ -94,10 +105,7 @@ $template=@'
    if(doc.width.as('px')!==level.width||doc.height.as('px')!==level.height)
     doc.resizeImage(UnitValue(level.width,'px'),UnitValue(level.height,'px'),null,method);
    methods.push('mip'+level.index+'='+method.toString());
-   rgb(doc);var hp=doc.activeLayer.duplicate();hp.visible=true;
-   hp.name='High Pass '+job.radius+'px / Overlay 100%';hp.applyHighPass(job.radius);
-   hp.blendMode=BlendMode.OVERLAY;hp.opacity=job.opacity;hp.fillOpacity=job.fill;
-   doc.flatten();rgb(doc);
+   sharpen(doc);
    var proof=new TargaSaveOptions();proof.alphaChannels=true;proof.rleCompression=false;
    proof.resolution=doc.channels.length>3?TargaBitsPerPixels.THIRTYTWO:TargaBitsPerPixels.TWENTYFOUR;
    doc.saveAs(new File(level.proof),proof,true,Extension.LOWERCASE);

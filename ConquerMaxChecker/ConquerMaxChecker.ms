@@ -12,7 +12,7 @@ struct ConquerTextureJob (process, reportFolder, prefix)
 global ConquerMaxCheckerScriptFile
 global ConquerMaxCheckerScriptVersion
 ConquerMaxCheckerScriptFile = ""
-ConquerMaxCheckerScriptVersion = "2026-11-20-v0.2.12-dds"
+ConquerMaxCheckerScriptVersion = "2026-11-25-v0.2.13-png"
 try(ConquerMaxCheckerScriptFile = getSourceFileName())catch()
 
 struct ConquerCheckItem
@@ -805,8 +805,8 @@ struct ConquerMaxCheckerStruct
             if kind == "dds" do
             (
                 args += " --size 0 --mips 2"
-                if psRefine do args += " --ps-refine --ps-version " + psVersion
             )
+            if psRefine do args += " --ps-refine --ps-version " + psVersion
             local info = dotNetObject "System.Diagnostics.ProcessStartInfo"
             info.FileName = exeFile
             info.Arguments = "--log-file " + quotePath (externalOutput + "\\convert.log") + " " + args
@@ -4847,7 +4847,7 @@ rollout conquerOneClickProgressRollout "一键出图进度" width:420 height:145
     )
 )
 
-rollout conquerCheckerRollout "征服MAX · 检查 / 整理 / 输出 v0.2.12" width:840 height:784
+rollout conquerCheckerRollout "征服MAX · 检查 / 整理 / 输出 v0.2.13" width:840 height:784
 (
     local externalStatusText = "就绪"
     local displayModeText = "检查只读；修改前自动备份"
@@ -4878,7 +4878,7 @@ rollout conquerCheckerRollout "征服MAX · 检查 / 整理 / 输出 v0.2.12" wi
     button btnOneClick "一键整理并出图" pos:[384,274] width:427 height:26
     groupBox gbOutput "3 输出 · 保留原贴图与 MAX 材质引用" pos:[10,319] width:820 height:100
     button btnConvertDDS "贴图 → DDS" pos:[24,344] width:140 height:28
-    checkbox chkPSRefine "PS 精修 MIP0 / MIP1" pos:[184,347] width:260 checked:true
+    checkbox chkPSRefine "PS 精修（DDS / PNG）" pos:[184,347] width:260 checked:true
     dropdownlist ddlPSVersion "PS版本" pos:[490,343] width:300 items:#("自动（最新已注册版本）","Photoshop 2025","Photoshop 2022","Photoshop CS3","Photoshop CC 2019","Photoshop 2026") selection:1
     button btnConvertPNG "贴图 → PNG" pos:[24,377] width:140 height:28
     button btnExportC3 "导出 C3 物件" pos:[224,377] width:140 height:28
@@ -4972,7 +4972,8 @@ rollout conquerCheckerRollout "征服MAX · 检查 / 整理 / 输出 v0.2.12" wi
         ddsPoll.active = false
         ConquerPendingDDSJob = undefined
         local ok = ConquerMaxChecker.finishTextureConversion job
-        externalStatusText = if ok then "外部状态：DDS 转换完成，已回读校验" else "外部状态：DDS 转换失败"
+        local kindText = if job.prefix == "conquer_png_convert" then "PNG" else "DDS"
+        externalStatusText = "外部状态：" + kindText + (if ok then " 转换完成，已回读校验" else " 转换失败")
         edtIssue.text = if ok then ConquerMaxChecker.lastConversionText else ConquerMaxChecker.lastError
         refreshStatusText()
         setBusy false
@@ -5376,6 +5377,25 @@ rollout conquerCheckerRollout "征服MAX · 检查 / 整理 / 输出 v0.2.12" wi
         try(setINISetting (psSettingsFile()) "DDS" "enabled" (state as string))catch()
     )
     on ddlPSVersion selected choiceIndex do selectPSVersion choiceIndex
+    fn launchTextureJob sourcePaths kind formatName =
+    (
+        ConquerPendingDDSJob = ConquerMaxChecker.startTextureConversion sourcePaths kind
+        if ConquerPendingDDSJob == undefined then
+        (
+            externalStatusText = "外部状态：" + formatName + " 转换未能启动"
+            edtIssue.text = ConquerMaxChecker.lastError
+            refreshStatusText()
+            messageBox ConquerMaxChecker.lastError title:"征服MAX模型检查器"
+        )
+        else
+        (
+            ddsPoll.active = true
+            externalStatusText = "外部状态：" + formatName + " 转换程序已启动"
+            edtIssue.text = "本次运行报告：" + ConquerPendingDDSJob.reportFolder
+            refreshStatusText()
+        )
+    )
+
     on btnConvertDDS pressed do
     (
         if ConquerMaxChecker.busy then return()
@@ -5428,21 +5448,7 @@ rollout conquerCheckerRollout "征服MAX · 检查 / 整理 / 输出 v0.2.12" wi
             )
             else
             (
-                ConquerPendingDDSJob = ConquerMaxChecker.startTextureConversion sourcePaths "dds"
-                if ConquerPendingDDSJob == undefined then
-                (
-                    externalStatusText = "外部状态：DDS 转换未能启动"
-                    edtIssue.text = ConquerMaxChecker.lastError
-                    refreshStatusText()
-                    messageBox ConquerMaxChecker.lastError title:"征服MAX模型检查器"
-                )
-                else
-                (
-                    ddsPoll.active = true
-                    externalStatusText = "外部状态：DDS 转换程序已启动"
-                    edtIssue.text = "本次运行报告：" + ConquerPendingDDSJob.reportFolder
-                    refreshStatusText()
-                )
+                launchTextureJob sourcePaths "dds" "DDS"
             )
         )
     
@@ -5482,32 +5488,13 @@ rollout conquerCheckerRollout "征服MAX · 检查 / 整理 / 输出 v0.2.12" wi
             )
             else
             (
-                externalStatusText = "外部状态：正在把 MAX 实际引用的 TGA 转换为 PNG..."
-                refreshStatusText()
-                try(windows.processPostedMessages())catch()
-                try
-                (
-                    if ConquerMaxChecker.runPNGConversion sourcePaths then
-                        externalStatusText = "外部状态：PNG 转换完成，文件已写入 C3"
-                    else
-                        externalStatusText = "外部状态：TGA 转 PNG 失败"
-                    edtIssue.text = ConquerMaxChecker.lastConversionText
-                    refreshStatusText()
-                )
-                catch
-                (
-                    externalStatusText = "外部状态：TGA 转 PNG 报错"
-                    refreshStatusText()
-                    messageBox ("MAX 贴图 PNG 转换执行失败：\n" + (ConquerMaxChecker.exceptionText "未知错误")) title:"征服MAX模型检查器"
-                )
-                if ConquerMaxChecker.lastError != "" do
-                    messageBox ConquerMaxChecker.lastError title:"征服MAX模型检查器"
+                launchTextureJob sourcePaths "png" "PNG"
             )
         )
     
         )
         try(performAction())catch(messageBox (ConquerMaxChecker.exceptionText "操作失败") title:"征服MAX")
-        setBusy false
+        if ConquerPendingDDSJob == undefined do setBusy false
     )
 
     on btnOneClick pressed do

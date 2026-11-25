@@ -36,7 +36,7 @@ from pathlib import Path
 from typing import Any, Callable, Iterable, Optional
 
 
-TOOL_VERSION = "0.2.10"
+TOOL_VERSION = "0.2.13"
 IMAGE_EXTS = {".dds", ".tga", ".psd", ".png", ".jpg", ".jpeg", ".bmp"}
 TEXTURE_EXTS = set(IMAGE_EXTS)
 PRODUCTION_EXTS = {".max", ".dds", ".tga"}
@@ -1339,7 +1339,8 @@ def run_dds_conversion(
     return 0 if result["converted"] and not result["errors"] else 1
 
 
-def convert_source_to_png(source: Path | list[Path], output_dir: Optional[Path] = None) -> dict[str, Any]:
+def convert_source_to_png(source: Path | list[Path], output_dir: Optional[Path] = None,
+                          ps_refine: bool = False, ps_version: str = "auto") -> dict[str, Any]:
     from PIL import Image
     source_paths = _normalize_dds_source_paths(source)
     destination_dir = _dds_output_dir(source_paths[0] if source_paths else Path.cwd(), output_dir)
@@ -1353,6 +1354,9 @@ def convert_source_to_png(source: Path | list[Path], output_dir: Optional[Path] 
             image, has_alpha, lo, hi = _load_source_rgba_for_dds(input_path, 0)
             if not has_alpha:
                 image = image.convert("RGB")
+            if ps_refine:
+                from photoshop_dds import refine_png
+                image, item["photoshop_version"] = refine_png(image, ps_version)
             target_dir.mkdir(parents=True, exist_ok=True)
             fd, tmp_name = tempfile.mkstemp(prefix=".conquer_", suffix=".png", dir=target_dir)
             os.close(fd)
@@ -1373,7 +1377,7 @@ def convert_source_to_png(source: Path | list[Path], output_dir: Optional[Path] 
     if not results:
         results.append({"source": "", "status": "error", "error": "未找到 TGA 文件。"})
     return {"source": "; ".join(map(str, source_paths)), "output_dir": str(destination_dir),
-            "format": "TGA -> PNG，原尺寸，逐像素与 Alpha 回读校验",
+            "format": ("PS 高反差保留 1px、叠加 100%，原尺寸 PNG，保留原始 Alpha" if ps_refine else "TGA -> PNG，原尺寸，逐像素与 Alpha 回读校验"),
             "converted": [i for i in results if i["status"] == "converted"],
             "errors": [i for i in results if i["status"] == "error"]}
 
@@ -1420,8 +1424,10 @@ def run_png_conversion(
     source: Path | list[Path],
     output_dir: Optional[Path] = None,
     report_output: Optional[Path] = None,
+    ps_refine: bool = False,
+    ps_version: str = "auto",
 ) -> int:
-    result = convert_source_to_png(source, output_dir)
+    result = convert_source_to_png(source, output_dir, ps_refine, ps_version)
     json_path, txt_path = write_png_conversion_report(result, report_output)
     print("MAX 贴图 TGA 转 PNG")
     print(f"成功转换：{len(result['converted'])}")
@@ -2970,6 +2976,9 @@ def build_parser() -> argparse.ArgumentParser:
         help="转换报告输出目录，默认写入当前目录",
     )
 
+    png_parser.add_argument("--ps-refine", action="store_true", help="在 Photoshop 中按原尺寸锐化一次再输出 PNG")
+    png_parser.add_argument("--ps-version", default="auto", help="auto、CS3 或已注册的 Photoshop 年份")
+
     fix_parser = subparsers.add_parser(
         "fix-hierarchy",
         help="创建缺失的资源层级文件夹，不移动已有文件",
@@ -3029,6 +3038,8 @@ def main(argv: list[str] | None = None) -> int:
             args.source,
             args.output,
             args.report_output,
+            args.ps_refine,
+            args.ps_version,
         )
     if args.command == "fix-hierarchy":
         return complete_hierarchy(
